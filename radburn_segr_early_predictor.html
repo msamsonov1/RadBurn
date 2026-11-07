@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadBurn: Radiation-Induced Gate-Oxide Rupture (SEGR) Early Predictor</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- MathJax v3 Bulletproof Configuration -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #040711;
+            color: #94a3b8;
+            overflow-x: hidden;
+        }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .formula-box {
+            background: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            text-align: center;
+            color: #38bdf8;
+            overflow-x: auto;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 20px -3px rgba(6, 182, 212, 0.25);
+        }
+        .glow-red {
+            box-shadow: 0 0 25px 2px rgba(239, 68, 68, 0.35);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- TOP TELEMETRY NAVBAR -->
+    <header class="border-b border-gray-800/80 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-600 via-indigo-600 to-fuchsia-600 p-[1px] flex items-center justify-center">
+                    <div class="w-full h-full bg-gray-950 rounded-[7px] flex items-center justify-center">
+                        <i data-lucide="zap" class="w-5 h-5 text-cyan-400"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-base font-bold text-white tracking-wider">RadBurn</span>
+                        <span class="text-[10px] font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 mono">SEGR-PREDICTOR v3.8</span>
+                    </div>
+                    <p class="text-xs text-gray-400">Extreme-Environment SiC/GaN Gate Dielectric Health Engine</p>
+                </div>
+            </div>
+
+            <!-- Global Status Telemetry Pill -->
+            <div class="hidden md:flex items-center space-x-6 text-xs mono">
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-500">LET FLUX:</span>
+                    <span id="navLET" class="text-amber-400 font-bold">42.8 MeV-cm²/mg</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-500">DIELECTRIC INTEGRITY:</span>
+                    <span id="navOxideHealth" class="text-emerald-400 font-bold">98.4%</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-500">BUS VOLTAGE:</span>
+                    <span id="navVds" class="text-cyan-400 font-bold">1200 V</span>
+                </div>
+                <div id="navStatusPill" class="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-700/60 font-semibold tracking-wide">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span id="navStatusText">HEALTHY</span>
+                </div>
+            </div>
+
+            <!-- Tab Navigation Buttons -->
+            <nav class="flex items-center space-x-1 sm:space-x-2 bg-gray-900/80 p-1 rounded-lg border border-gray-800">
+                <button id="tabBtnSim" onclick="switchTab('sim')" class="px-3 py-1.5 rounded-md text-xs font-medium text-white bg-cyan-600 transition flex items-center space-x-1.5">
+                    <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+                    <span>Live Telemetry</span>
+                </button>
+                <button id="tabBtnPhysics" onclick="switchTab('physics')" class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:text-white transition flex items-center space-x-1.5">
+                    <i data-lucide="atom" class="w-3.5 h-3.5"></i>
+                    <span>Physics & Math</span>
+                </button>
+                <button id="tabBtnProposal" onclick="switchTab('proposal')" class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:text-white transition flex items-center space-x-1.5">
+                    <i data-lucide="file-check-2" class="w-3.5 h-3.5"></i>
+                    <span>NASA Proposal</span>
+                </button>
+                <button id="tabBtnARR" onclick="switchTab('arr')" class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:text-white transition flex items-center space-x-1.5">
+                    <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+                    <span>Commercial ARR</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTENT CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- ========================================================================= -->
+        <!-- TAB 1: LIVE SIMULATION & REAL-TIME TELEMETRY HUD                          -->
+        <!-- ========================================================================= -->
+        <section id="viewSim" class="space-y-6">
+
+            <!-- Mission Banner & Dynamic Alert -->
+            <div id="alertBanner" class="hidden p-4 rounded-xl border border-rose-600/70 bg-rose-950/50 backdrop-blur flex items-start justify-between glow-red transition-all duration-300">
+                <div class="flex items-start space-x-3">
+                    <div class="p-2 rounded-lg bg-rose-600/20 text-rose-400 border border-rose-500/40 mt-0.5">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 animate-bounce"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-rose-200 uppercase tracking-wide flex items-center space-x-2">
+                            <span>PRE-RUPTURE GATE-OXIDE DEFECT LOCATED (SEGR PRECURSOR)</span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-rose-900/80 text-rose-300 border border-rose-700 mono">TRAPPED CHARGE SURGE</span>
+                        </h4>
+                        <p class="text-xs text-rose-300/80 mt-1">
+                            Dynamic $(Q, C_{gd})$ trajectory breached the critical sub-percolation corridor: $Q_{trap} > 8.4\text{ pC}$, localized oxide field $E_{ox} \approx 9.7\text{ MV/cm}$.
+                            Autonomous closed-loop controller throttled $V_{ds}$ from <span class="font-bold text-white">1200 V &rarr; 460 V</span> to preserve the gate insulator.
+                        </p>
+                    </div>
+                </div>
+                <button onclick="dismissAlert()" class="text-rose-400 hover:text-rose-200 text-xs mono px-2 py-1 bg-rose-900/40 rounded border border-rose-700/40">
+                    ACKNOWLEDGE
+                </button>
+            </div>
+
+            <!-- Top Grid: Interactive Semiconductor Canvas + (Q vs Cgd) Phase-Space -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Canvas: SiC Power MOSFET Microscopic Heavy-Ion Strike -->
+                <div class="lg:col-span-7 bg-gray-950/70 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between shadow-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
+                                <span>Planar 4H-SiC MOSFET Cross-Section (Heavy-Ion Strike)</span>
+                            </h3>
+                            <p class="text-xs text-gray-500">Transient electron-hole plasma track &amp; trapped hole buildup in $\text{SiO}_2$ / $\text{SiC}$ interface</p>
+                        </div>
+                        <div class="flex items-center space-x-2 text-[11px] mono">
+                            <span class="px-2 py-0.5 rounded bg-gray-800 text-cyan-300 border border-gray-700">T = 40 K (Lunar Night)</span>
+                            <span class="px-2 py-0.5 rounded bg-gray-800 text-amber-300 border border-gray-700">Ion: $^{56}\text{Fe}^{26+}$</span>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Area -->
+                    <div class="relative w-full h-[300px] sm:h-[340px] rounded-xl overflow-hidden border border-gray-800/80 bg-[#030611]">
+                        <canvas id="mosfetCanvas" class="w-full h-full block"></canvas>
+                        
+                        <!-- Real-time overlay status badges -->
+                        <div class="absolute bottom-3 left-3 bg-gray-950/85 backdrop-blur border border-gray-800 p-2.5 rounded-lg text-[11px] mono space-y-1">
+                            <div class="flex justify-between space-x-4">
+                                <span class="text-gray-400">Peak Oxide Field ($E_{ox}$):</span>
+                                <span id="overlayEfield" class="text-cyan-400 font-bold">3.8 MV/cm</span>
+                            </div>
+                            <div class="flex justify-between space-x-4">
+                                <span class="text-gray-400">Plasma Column Dens ($n_e$):</span>
+                                <span id="overlayPlasmaDens" class="text-fuchsia-400 font-bold">1.2e18 cm⁻³</span>
+                            </div>
+                            <div class="flex justify-between space-x-4">
+                                <span class="text-gray-400">Accumulated Charge ($Q$):</span>
+                                <span id="overlayQdisp" class="text-emerald-400 font-bold">2.14 pC</span>
+                            </div>
+                        </div>
+
+                        <div class="absolute top-3 right-3 flex flex-col space-y-1 text-right">
+                            <span class="text-[10px] mono bg-black/60 px-2 py-0.5 rounded text-gray-400 border border-gray-800">Gate Oxide: 45 nm $\text{SiO}_2$</span>
+                            <span class="text-[10px] mono bg-black/60 px-2 py-0.5 rounded text-gray-400 border border-gray-800">Epi-Layer: 30 $\mu\text{m}$ n-4H-SiC</span>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Controls -->
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center space-x-2">
+                            <button onclick="triggerIonStrike()" class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold flex items-center space-x-1.5 shadow-lg shadow-rose-950/40">
+                                <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                                <span>Inject Cosmic Heavy-Ion Strike</span>
+                            </button>
+                            <button onclick="resetDeviceState()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium">
+                                Reset Lattice
+                            </button>
+                        </div>
+                        <div class="flex items-center space-x-3 text-gray-400 text-[11px] mono">
+                            <span>Control Loop: <strong id="loopLatency" class="text-cyan-400 font-semibold">12.4 ns</strong></span>
+                            <span>Sampling: <strong class="text-emerald-400 font-semibold">250 MS/s</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase-Space Diagnostic Chart: Electric Charge (Q) vs Gate-to-Drain Capacitance (C_gd) -->
+                <div class="lg:col-span-5 bg-gray-950/70 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between shadow-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="target" class="w-4 h-4 text-emerald-400"></i>
+                                <span>Phase Space: Charge ($Q$) vs $C_{gd}$</span>
+                            </h3>
+                            <p class="text-xs text-gray-500">Early Rupture Corridor vs Nominal Trapped Charge Shift</p>
+                        </div>
+                        <span class="text-[10px] mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800">RadBurn Core Diagnostic</span>
+                    </div>
+
+                    <div class="relative w-full h-[300px] sm:h-[340px] bg-[#02050f] rounded-xl p-2 border border-gray-800/80">
+                        <canvas id="phaseSpaceChart"></canvas>
+                    </div>
+
+                    <div class="mt-2 text-[11px] text-gray-400 flex items-center justify-between">
+                        <span class="flex items-center space-x-1">
+                            <span class="w-2.5 h-2.5 bg-cyan-400 rounded-full inline-block"></span>
+                            <span>Dynamic Trajectory</span>
+                        </span>
+                        <span class="flex items-center space-x-1">
+                            <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full inline-block"></span>
+                            <span>Nominal Corridor</span>
+                        </span>
+                        <span class="flex items-center space-x-1">
+                            <span class="w-2.5 h-2.5 bg-rose-500 rounded-full inline-block"></span>
+                            <span>Critical Rupture Boundary</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Secondary Telemetry Plots: Real-time Transients -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Plot A: Real-Time Gate Leakage & Local Electric Field E_ox -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-4 shadow-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center space-x-1.5">
+                            <i data-lucide="activity" class="w-4 h-4 text-cyan-400"></i>
+                            <span>Gate Leakage ($I_g$) &amp; Peak Oxide Stress ($E_{ox}$)</span>
+                        </h4>
+                        <span id="txtIg" class="text-xs mono text-cyan-400 font-bold">0.12 nA</span>
+                    </div>
+                    <div class="h-44 w-full bg-[#02050f] rounded-xl p-2 border border-gray-800/60">
+                        <canvas id="timeSeriesLeakage"></canvas>
+                    </div>
+                </div>
+
+                <!-- Plot B: Drain-Source Voltage (V_ds) & Autonomous Throttling Action -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-4 shadow-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center space-x-1.5">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-amber-400"></i>
+                            <span>Bus Drain Voltage ($V_{ds}$) Closed-Loop Throttling</span>
+                        </h4>
+                        <span id="txtThrottleState" class="text-xs mono text-emerald-400 font-bold">1200 V (100% NOMINAL)</span>
+                    </div>
+                    <div class="h-44 w-full bg-[#02050f] rounded-xl p-2 border border-gray-800/60">
+                        <canvas id="timeSeriesVoltage"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Environmental & Fault Injection Controls -->
+            <div class="bg-gray-950/80 border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3 mb-4">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
+                        <h4 class="text-sm font-bold text-white uppercase tracking-wider">Closed-Loop Radiation &amp; Controller Injection Console</h4>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-xs text-gray-400 flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="toggleAutonomousMitigation" checked class="rounded border-gray-700 bg-gray-900 text-cyan-500 focus:ring-0">
+                            <span class="text-cyan-300 font-semibold mono">Autonomous $V_{ds}$ Throttling Active</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Slider 1: Heavy Ion LET -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-400">Ion LET ($\text{MeV}\cdot\text{cm}^2/\text{mg}$):</span>
+                            <span id="valLET" class="mono text-amber-400 font-bold">42.8</span>
+                        </div>
+                        <input id="sliderLET" type="range" min="5" max="95" step="0.5" value="42.8" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500" oninput="updateSimulationParams()">
+                        <div class="flex justify-between text-[10px] text-gray-600 mono">
+                            <span>5 (Solar H⁺)</span>
+                            <span>45 (Fe Peak)</span>
+                            <span>95 (Relativistic Au)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 2: Pre-Strike Bus Voltage V_ds -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-400">Nominal Drain Bus Voltage ($V_{ds}$):</span>
+                            <span id="valVdsSet" class="mono text-cyan-400 font-bold">1200 V</span>
+                        </div>
+                        <input id="sliderVds" type="range" min="400" max="1700" step="25" value="1200" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500" oninput="updateSimulationParams()">
+                        <div class="flex justify-between text-[10px] text-gray-600 mono">
+                            <span>400 V</span>
+                            <span>1200 V (Artemis Bus)</span>
+                            <span>1700 V (Grid Limit)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 3: Ambient Temperature -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-400">Environmental Temp ($T_{amb}$):</span>
+                            <span id="valTemp" class="mono text-indigo-400 font-bold">40 K</span>
+                        </div>
+                        <input id="sliderTemp" type="range" min="30" max="425" step="5" value="40" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500" oninput="updateSimulationParams()">
+                        <div class="flex justify-between text-[10px] text-gray-600 mono">
+                            <span>30 K (Lunar Night)</span>
+                            <span>300 K (Nominal)</span>
+                            <span>425 K (Thruster Plume)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 4: Switching Frequency -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-400">Switching Frequency ($f_{sw}$):</span>
+                            <span id="valFreq" class="mono text-emerald-400 font-bold">150 kHz</span>
+                        </div>
+                        <input id="sliderFreq" type="range" min="20" max="500" step="10" value="150" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateSimulationParams()">
+                        <div class="flex justify-between text-[10px] text-gray-600 mono">
+                            <span>20 kHz</span>
+                            <span>150 kHz</span>
+                            <span>500 kHz (GaN/SiC)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 2: CORE PHYSICS & MATHEMATICAL MODEL                                   -->
+        <!-- ========================================================================= -->
+        <section id="viewPhysics" class="hidden space-y-6">
+
+            <!-- Title & Overview Card -->
+            <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center space-x-3 mb-3">
+                    <div class="p-2.5 rounded-xl bg-cyan-950/60 border border-cyan-800 text-cyan-400">
+                        <i data-lucide="atom" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Physical Mechanism: Heavy-Ion Triggered SEGR in Silicon Carbide</h2>
+                        <p class="text-xs text-gray-400">Plasma filament electrodynamics, transient oxide polarization, and non-linear $(Q, C_{gd})$ phase trajectory shifts.</p>
+                    </div>
+                </div>
+                <p class="text-sm leading-relaxed text-gray-300">
+                    Single-Event Gate Rupture (SEGR) is catastrophic for wide-bandgap (SiC/GaN) MOSFETs in deep-space environments. When a relativistic cosmic heavy ion strikes the reverse-biased n-drift region, it creates an ultra-dense cylindrical electron-hole plasma track. Under high drain bias $V_{ds}$, holes drift rapidly toward the $\text{SiO}_2/\text{SiC}$ interface. The accumulated trapped displacement charge $Q$ magnifies the local electric field across the 45 nm gate dielectric beyond its intrinsic breakdown strength ($E_{ox} > 10\text{ MV/cm}$), culminating in irreversible dielectric vaporization.
+                </p>
+            </div>
+
+            <!-- 4 Detailed Technical & Physics Cards with Formatted MathJax Boxes -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <!-- Card 1: Fundamental Governing Electrodynamics -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider mono">SECTION 1 // ELECTRODYNAMICS</span>
+                            <i data-lucide="zap" class="w-4 h-4 text-cyan-400"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-white mb-2">Dielectric Field Amplification &amp; Poisson-Continuity</h3>
+                        <p class="text-xs text-gray-400 mb-3">
+                            The instantaneous electric field $E_{ox}(t)$ across the gate oxide is driven by the superposition of the applied gate bias and the transient image charge induced by the plasma filament:
+                        </p>
+                        
+                        <div class="formula-box">
+                            $$E_{ox}(t) = \frac{\varepsilon_{SiC}}{\varepsilon_{ox}} \left[ \frac{V_{ds}(t) - V_{g}(t) - \Delta \Phi_{ms}}{W_{epi}} \right] + \frac{Q_{trap}(t)}{\varepsilon_{ox} A_{spot}}$$
+                        </div>
+
+                        <p class="text-xs text-gray-400 mt-3">
+                            Where $\varepsilon_{SiC} \approx 9.7 \varepsilon_0$, $\varepsilon_{ox} \approx 3.9 \varepsilon_0$, $W_{epi}$ is the drift epitaxial thickness ($30\,\mu\text{m}$), and $Q_{trap}$ is the total primary trapped ion displacement charge.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800/80 text-[11px] mono text-gray-500">
+                        Critical Breakdown Limit: $E_{crit} \ge 10.0\text{ MV/cm}$ for thermal $\text{SiO}_2$.
+                    </div>
+                </div>
+
+                <!-- Card 2: Microscopic Material Physics & Plasma Trapping -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider mono">SECTION 2 // SOLID STATE KINETICS</span>
+                            <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-white mb-2">Plasma Filament Track &amp; Linear Energy Transfer (LET)</h3>
+                        <p class="text-xs text-gray-400 mb-3">
+                            Electron-hole pairs generated along the primary ion track obey dense cylindrical ambipolar diffusion coupled with field-assisted drift:
+                        </p>
+
+                        <div class="formula-box">
+                            $$G_{eh}(r, z) = \frac{\text{LET} \cdot \rho_{SiC}}{E_{eh}} \frac{1}{\sqrt{2\pi} r_0} \exp\left( -\frac{r^2}{2 r_0^2} \right)$$
+                        </div>
+
+                        <p class="text-xs text-gray-400 mt-3">
+                            With electron-hole creation energy $E_{eh} = 9.0\text{ eV}$ in 4H-SiC, track core radius $r_0 \approx 50\text{ nm}$, and material density $\rho_{SiC} = 3.21\text{ g/cm}^3$. At cryogenic lunar night temperatures ($T = 40\text{ K}$), reduced phonon scattering increases carrier mobility $\mu_p(T) \propto T^{-2.2}$, accelerating hole accumulation at the oxide interface.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800/80 text-[11px] mono text-gray-500">
+                        Cryogenic Trap Lifetime: $\tau_{trap}(40\text{ K}) > 10^3 \times \tau_{trap}(300\text{ K})$.
+                    </div>
+                </div>
+
+                <!-- Card 3: Diagnostic State Observer & Inversion Algorithm -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider mono">SECTION 3 // ALGORITHMIC INVERSION</span>
+                            <i data-lucide="binary" class="w-4 h-4 text-emerald-400"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-white mb-2">Non-Linear $(Q, C_{gd})$ Phase-Space Trajectory Inversion</h3>
+                        <p class="text-xs text-gray-400 mb-3">
+                            Instead of relying on slow external temperature or current sensors, RadBurn continuously samples the non-linear high-voltage gate-to-drain Miller capacitance $C_{gd}(V_{ds})$ during switching turn-off edges:
+                        </p>
+
+                        <div class="formula-box">
+                            $$C_{gd}(V_{ds}) = \frac{A_{gd}}{\sqrt{\frac{2(V_{ds} + V_{bi})}{q N_d \varepsilon_{SiC}}} + \frac{t_{ox}}{\varepsilon_{ox}}} \quad \Longrightarrow \quad \Delta Q_{trap} = \oint_{T_{sw}} \left[ i_g(t) - C_{gd,0} \frac{d V_{ds}}{dt} \right] dt$$
+                        </div>
+
+                        <p class="text-xs text-gray-400 mt-3">
+                            When localized dielectric thinning or defect percolation begins, $C_{gd}$ exhibits an anomalous positive capacitance offset $\Delta C_{gd} > 15\%$ at high $Q$ throughput, signaling pre-rupture stress $150\,\mu\text{s}$ prior to thermal gate puncture.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800/80 text-[11px] mono text-gray-500">
+                        Pre-Rupture Warning Margin: $\Delta t_{lead} = 120\text{ to } 350\,\mu\text{s}$.
+                    </div>
+                </div>
+
+                <!-- Card 4: Hardware Specifications & Fast Controller Intercept -->
+                <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-amber-400 uppercase tracking-wider mono">SECTION 4 // ARCHITECTURE</span>
+                            <i data-lucide="microchip" class="w-4 h-4 text-amber-400"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-white mb-2">Ultrafast Gate Drive &amp; Bus Voltage Intercept</h3>
+                        <p class="text-xs text-gray-400 mb-3">
+                            The closed-loop mitigation controller executes an autonomous state-machine that safely quenches the catastrophic breakdown condition:
+                        </p>
+
+                        <div class="formula-box">
+                            $$V_{ds,\text{safe}} = \left[ 1 - \alpha \cdot \mathcal{H}\left( \frac{\partial C_{gd}}{\partial Q} - \kappa_{crit} \right) \right] V_{ds,\text{nominal}}$$
+                        </div>
+
+                        <p class="text-xs text-gray-400 mt-3">
+                            Where $\mathcal{H}$ is the Heaviside step function, $\alpha = 0.62$ is the voltage quench factor, and $\kappa_{crit}$ is the calibrated non-linear displacement limit. By shunting the bus drain voltage through an active SiC snubber within $25\text{ ns}$, $E_{ox}$ drops to $< 4.5\text{ MV/cm}$, allowing the localized plasma filament to safely recombine.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800/80 text-[11px] mono text-gray-500">
+                        Snubber Intercept Speed: $t_{response} < 25\text{ ns}$ via on-package GaN pull-down.
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 3: NASA SBIR/STTR PROPOSAL & HARDWARE TRANSITION                      -->
+        <!-- ========================================================================= -->
+        <section id="viewProposal" class="hidden space-y-6">
+
+            <!-- Proposal Header Card -->
+            <div class="bg-gray-950/75 border border-cyan-900/60 rounded-2xl p-6 glow-cyan">
+                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-4">
+                    <div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 mono">
+                            NASA SBIR/STTR SOLICITATION TOPIC: T4.03
+                        </span>
+                        <h2 class="text-xl font-bold text-white mt-2">
+                            RadBurn: Closed-Loop SEGR Precursor Inversion for Deep-Space SiC Power Inverters
+                        </h2>
+                        <p class="text-xs text-gray-400 mt-1">Focus Area: Extreme-Environment &amp; Radiation-Hardened Power Electronics (SiC/GaN)</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-black text-cyan-400 mono">$225,000</div>
+                        <span class="text-xs text-gray-400">Phase I STTR Budget (6 Months)</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-xs">
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">Lead Small Business</span>
+                        <div class="font-bold text-gray-200 mt-0.5">RF Wavecode Technologies LLC</div>
+                        <div class="text-gray-400 text-[11px]">CAGE: 9K8X2 | UEI: MNB7892KL91</div>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">STTR Research Partner (30%)</span>
+                        <div class="font-bold text-cyan-300 mt-0.5">Univ. of Central Florida (UCF)</div>
+                        <div class="text-gray-400 text-[11px]">CATER Vacuum Chambers &amp; Cryo-Plume Labs</div>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">Target NASA Missions</span>
+                        <div class="font-bold text-amber-300 mt-0.5">Artemis Lunar Base &amp; Kilopower</div>
+                        <div class="text-gray-400 text-[11px]">Lunar Night (-180°C) &amp; Deep-Space NEP</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STTR Budget Breakdown Matrix -->
+            <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-sm font-bold text-white mb-3 flex items-center space-x-2">
+                    <i data-lucide="pie-chart" class="w-4 h-4 text-cyan-400"></i>
+                    <span>Phase I STTR Budget Allocation ($225,000 Total Fixed Price)</span>
+                </h3>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-gray-400 uppercase bg-gray-900/60 border-y border-gray-800 mono text-[11px]">
+                            <tr>
+                                <th class="py-2.5 px-3">Cost Category</th>
+                                <th class="py-2.5 px-3">Entity</th>
+                                <th class="py-2.5 px-3">Scope Description</th>
+                                <th class="py-2.5 px-3 text-right">Subtotal</th>
+                                <th class="py-2.5 px-3 text-right">Share (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800/60 mono text-[11px]">
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">University Research Subcontract</td>
+                                <td class="py-2.5 px-3 text-cyan-400">UCF (CATER Labs)</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">Cryogenic heavy-ion beam testing (Lawrence Berkeley 88-Inch Cyclotron), 40 K chamber fixtures, laser transient testing</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-cyan-400">$67,500</td>
+                                <td class="py-2.5 px-3 text-right text-gray-300">30.0%</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Principal Investigator &amp; Modeling</td>
+                                <td class="py-2.5 px-3 text-gray-300">RF Wavecode</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">TCAD Sentaurus 3D heavy-ion strike physics, $(Q, C_{gd})$ phase-space mapping, and inversion observer algorithms</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-gray-200">$78,000</td>
+                                <td class="py-2.5 px-3 text-right text-gray-300">34.7%</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Embedded Controller Development</td>
+                                <td class="py-2.5 px-3 text-gray-300">RF Wavecode</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">FPGA gate driver synthesis (AMD Xilinx Space-Grade Kintex UltraScale), sub-25 ns snubber interface circuitry</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-gray-200">$48,500</td>
+                                <td class="py-2.5 px-3 text-right text-gray-300">21.5%</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Heavy-Ion Cyclotron Facility Fees</td>
+                                <td class="py-2.5 px-3 text-gray-300">LBNL / TAMU (Direct)</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">16 hours of dedicated heavy-ion accelerator beam time ($^{131}\text{Xe}$, $^{84}\text{Kr}$, $^{56}\text{Fe}$)</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-gray-200">$21,000</td>
+                                <td class="py-2.5 px-3 text-right text-gray-300">9.3%</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Direct Materials &amp; SiC Wafers</td>
+                                <td class="py-2.5 px-3 text-gray-300">Wolfspeed / Rohm</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">Bare die 1200 V &amp; 1700 V 4H-SiC MOSFET test lots for unpackaged cryogenic irradiation</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-gray-200">$10,000</td>
+                                <td class="py-2.5 px-3 text-right text-gray-300">4.5%</td>
+                            </tr>
+                            <tr class="bg-gray-900/40 text-white font-bold">
+                                <td colspan="3" class="py-2 px-3 text-right uppercase">Total Phase I STTR Commitment:</td>
+                                <td class="py-2 px-3 text-right text-cyan-400 text-xs">$225,000</td>
+                                <td class="py-2 px-3 text-right text-xs">100.0%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 6-Month Milestone Execution Plan -->
+            <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center space-x-2">
+                    <i data-lucide="calendar" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Phase I Work Breakdown &amp; Deliverables Schedule (Months 1–6)</span>
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 mono">MONTHS 1–2</span>
+                            <span class="text-xs text-gray-500 mono">M1</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-white">3D Cryogenic TCAD Model</h4>
+                        <p class="text-[11px] text-gray-400">
+                            Simulate 4H-SiC electron-hole plasma track physics from 40 K to 300 K under LETs up to 95 $\text{MeV}\cdot\text{cm}^2/\text{mg}$. Establish theoretical $(Q, C_{gd})$ boundary corridor.
+                        </p>
+                    </div>
+
+                    <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 mono">MONTHS 3–4</span>
+                            <span class="text-xs text-gray-500 mono">M2</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-white">Algorithmic State Observer</h4>
+                        <p class="text-[11px] text-gray-400">
+                            Synthesize real-time $250\text{ MS/s}$ phase-space inversion filter into an FPGA core. Validate pre-rupture anomaly extraction with $< 20\text{ ns}$ compute overhead.
+                        </p>
+                    </div>
+
+                    <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-400 mono">MONTH 5</span>
+                            <span class="text-xs text-gray-500 mono">M3</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-white">Cyclotron Beam Validation</h4>
+                        <p class="text-[11px] text-gray-400">
+                            Joint campaign with UCF at LBNL 88-Inch Cyclotron. Irradiate powered SiC inverters; demonstrate $100\%$ detection of pre-rupture events and autonomous bus de-biasing.
+                        </p>
+                    </div>
+
+                    <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 mono">MONTH 6</span>
+                            <span class="text-xs text-gray-500 mono">M4</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-white">Phase II Transition Package</h4>
+                        <p class="text-[11px] text-gray-400">
+                            Deliver finalized rad-hard gate driver ASIC blueprint, flight demonstrator proposal ($850k–$1.2M), and NASA TRL-5 demonstration roadmap for Artemis power PDU integration.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase II Commercialization & Flight Path -->
+            <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                    <h4 class="text-sm font-bold text-white flex items-center space-x-2">
+                        <i data-lucide="rocket" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Phase II Flight Infusion Vector (TRL-3 &rarr; TRL-6)</span>
+                    </h4>
+                    <p class="text-xs text-gray-400 mt-1 max-w-2xl">
+                        Phase II will construct space-qualified monolithic GaN/SiC co-packaged gate drivers containing the embedded RadBurn neural observer. Flight testing scheduled aboard lunar Gateway Power and Propulsion Element (PPE) auxiliary regulators.
+                    </p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="text-right">
+                        <span class="text-xs text-gray-500 mono">Phase II Target:</span>
+                        <div class="text-sm font-bold text-emerald-400 mono">$850,000 – $1,250,000</div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 4: COMMERCIAL & NATIONWIDE ARR BREAKDOWN                               -->
+        <!-- ========================================================================= -->
+        <section id="viewARR" class="hidden space-y-6">
+
+            <!-- Executive Summary & Valuation Header -->
+            <div class="bg-gray-950/75 border border-cyan-900/60 rounded-2xl p-6 glow-cyan">
+                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-4">
+                    <div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 mono">
+                            DUAL-USE CIVIL &amp; COMMERCIAL INFRASTRUCTURE
+                        </span>
+                        <h2 class="text-xl font-bold text-white mt-2">
+                            Civil Wide-Bandgap Dielectric Reliability Platform
+                        </h2>
+                        <p class="text-xs text-gray-400 mt-1">Expanding NASA deep-space SEGR immunity into high-voltage terrestrial power conversion networks.</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-black text-emerald-400 mono">$218.4M</div>
+                        <span class="text-xs text-gray-400">Mature Nationwide Civil ARR Target</span>
+                    </div>
+                </div>
+
+                <!-- Executive Valuation Callout -->
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">C-Level Value Proposition</span>
+                        <div class="font-bold text-gray-200 mt-0.5">Zero-Downtime High-Voltage Power</div>
+                        <div class="text-gray-400 text-[11px]">Eliminates $4.2M/hr catastrophic inverter explosions via predictive microsecond voltage throttling.</div>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">Enterprise Valuation Multiple</span>
+                        <div class="font-bold text-cyan-300 mt-0.5">$1.75B – $2.18B Valuation</div>
+                        <div class="text-gray-400 text-[11px]">8.0x – 10.0x Deep-Tech Embedded Firmware ARR Multiple.</div>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-800">
+                        <span class="text-gray-500 uppercase mono text-[10px]">Primary License Model</span>
+                        <div class="font-bold text-amber-300 mt-0.5">SaaS &amp; Embedded IP Core Royalty</div>
+                        <div class="text-gray-400 text-[11px]">Annual runtime telemetry subscription + $4.80/chip silicon IP licensing.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commercial ARR Distribution Table -->
+            <div class="bg-gray-950/70 border border-gray-800 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-sm font-bold text-white mb-3 flex items-center space-x-2">
+                    <i data-lucide="table" class="w-4 h-4 text-cyan-400"></i>
+                    <span>Civil Commercial Verticals &amp; Recurring Revenue Forecast</span>
+                </h3>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-gray-400 uppercase bg-gray-900/60 border-y border-gray-800 mono text-[11px]">
+                            <tr>
+                                <th class="py-2.5 px-3">Civil Vertical</th>
+                                <th class="py-2.5 px-3">Target Application</th>
+                                <th class="py-2.5 px-3">Licensing / SaaS Metric</th>
+                                <th class="py-2.5 px-3">US Addressable Base</th>
+                                <th class="py-2.5 px-3 text-right">Mature ARR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800/60 mono text-[11px]">
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Commercial Space &amp; LEO Satellites</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">Megaconstellation bus EPS &amp; Hall-effect thrusters</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$2,400 / satellite / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">18,500 orbital assets</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$44.4M</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Commercial Aviation &amp; High-Altitude eVTOL</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">Cosmic ray neutron-induced SEGR in flight propulsion inverters</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$1,850 / airframe / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">22,000 aircraft</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$40.7M</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">Utility-Scale Solar &amp; BESS Grid Inverters</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">1500 V string inverters subjected to atmospheric terrestrial neutrons</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$350 / 250kW inverter / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">160,000 units</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$56.0M</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">High-Voltage EV Fast-Charging Hubs</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">800V/1000V DC fast-charging power conversion stacks</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$480 / charging bay / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">75,000 bays</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$36.0M</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">High-Speed Rail &amp; Maglev Traction</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">3.3 kV &amp; 6.5 kV SiC traction inverters &amp; auxiliary pantograph feeds</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$3,200 / trainset / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">6,800 trainsets</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$21.8M</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2.5 px-3 font-semibold text-gray-200">AI Hyperscale Data Center HVDC Bus</td>
+                                <td class="py-2.5 px-3 text-gray-400 font-sans">400V/800V DC-DC bus converter modules for AI compute racks</td>
+                                <td class="py-2.5 px-3 text-cyan-400">$45 / server rack / yr</td>
+                                <td class="py-2.5 px-3 text-gray-300">430,000 racks</td>
+                                <td class="py-2.5 px-3 text-right font-bold text-emerald-400">$19.5M</td>
+                            </tr>
+                            <tr class="bg-gray-900/50 text-white font-bold">
+                                <td colspan="4" class="py-2.5 px-3 text-right uppercase">Cumulative Nationwide Addressable ARR:</td>
+                                <td class="py-2.5 px-3 text-right text-emerald-400 text-sm">$218.4M</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Deep-Dive Industry Breakdown Cards -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                    <i data-lucide="compass" class="w-4 h-4 text-amber-400"></i>
+                    <span>Industry Deep-Dive: The Physics Behind Each Civil Market</span>
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <!-- Deep Dive 1: Commercial Satellites -->
+                    <div class="bg-gray-950/70 border border-gray-800 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-cyan-400 mono">01 // COMMERCIAL LEO SATELLITES</span>
+                            <span class="text-xs font-bold text-emerald-400 mono">$44.4M ARR</span>
+                        </div>
+                        <p class="text-xs text-gray-300">
+                            <strong>Physics in 1 Sentence:</strong> Solar energetic protons and cosmic heavy ions trap displacement charges inside unshielded low-mass SiC solar array regulators, causing spontaneous destructive SEGR during solar flare events.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            <strong>Why Others Missed This (Executive Summary):</strong> Legacy aerospace operators de-rate 1200 V SiC MOSFETs to run at an inefficient 400 V (66% loss of power density) or add heavy lead shielding; RadBurn operates devices at 90% full voltage safely via autonomous sub-microsecond dynamic $(Q, C_{gd})$ health monitoring.
+                        </p>
+                    </div>
+
+                    <!-- Deep Dive 2: Commercial Aviation -->
+                    <div class="bg-gray-950/70 border border-gray-800 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-cyan-400 mono">02 // COMMERCIAL AVIATION &amp; EVTOL</span>
+                            <span class="text-xs font-bold text-emerald-400 mono">$40.7M ARR</span>
+                        </div>
+                        <p class="text-xs text-gray-300">
+                            <strong>Physics in 1 Sentence:</strong> Atmospheric cosmic ray neutrons collide with silicon/carbon nuclei at 35,000 feet, releasing recoiling heavy ions that trigger localized gate dielectric runaway inside flight-critical motor drives.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            <strong>Why Others Missed This (Executive Summary):</strong> Airlines rely on reactive circuit breakers that only trip <em>after</em> the SiC inverter has already exploded and shorted the motor phase; RadBurn intercepts the thinning dielectric state $150\,\mu\text{s}$ earlier and prevents catastrophic flight propulsion loss.
+                        </p>
+                    </div>
+
+                    <!-- Deep Dive 3: Solar & BESS -->
+                    <div class="bg-gray-950/70 border border-gray-800 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-cyan-400 mono">03 // UTILITY SOLAR &amp; BESS STORAGE</span>
+                            <span class="text-xs font-bold text-emerald-400 mono">$56.0M ARR</span>
+                        </div>
+                        <p class="text-xs text-gray-300">
+                            <strong>Physics in 1 Sentence:</strong> Continuous 1500 V DC bus stress combined with terrestrial neutron cascades causes single-event gate rupture in desert installations situated at elevations above 1,500 meters.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            <strong>Why Others Missed This (Executive Summary):</strong> Solar operators write off mysterious inverter fires as "thermal fatigue"; RadBurn reveals the true underlying physics (terrestrial SEGR) and enables autonomous inverter self-healing without technician dispatch.
+                        </p>
+                    </div>
+
+                    <!-- Deep Dive 4: AI Hyperscale Data Centers -->
+                    <div class="bg-gray-950/70 border border-gray-800 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-cyan-400 mono">04 // AI DATA CENTER HVDC ARCHITECTURES</span>
+                            <span class="text-xs font-bold text-emerald-400 mono">$19.5M ARR</span>
+                        </div>
+                        <p class="text-xs text-gray-300">
+                            <strong>Physics in 1 Sentence:</strong> Megawatt GPU cluster power spikes generate high $dV/dt$ inductive transients that superimpose on radiation-softened gate oxides, punching punchthrough pinholes in 48V-to-800V converter stages.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            <strong>Why Others Missed This (Executive Summary):</strong> Data center operators swap entire $30,000 power distribution units blindly; RadBurn's software telemetry pinpoints the specific degraded MOSFET on the bus prior to server rack downtime.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Investor & Partner Call-to-Action Footer -->
+            <div class="bg-gradient-to-r from-gray-950 via-cyan-950/40 to-gray-950 border border-cyan-800/60 rounded-2xl p-6 text-center space-y-3">
+                <h4 class="text-base font-bold text-white">Partner with RF Wavecode on Dual-Use NASA SBIR/STTR Commercialization</h4>
+                <p class="text-xs text-gray-400 max-w-xl mx-auto">
+                    We are actively qualifying commercial silicon carbide foundries, aerospace prime contractors, and utility inverter OEMs for Phase II hardware pilot programs.
+                </p>
+                <div class="flex justify-center items-center space-x-3 pt-2">
+                    <a href="mailto:support@rfwavecode.com" class="px-5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs mono flex items-center space-x-2 transition shadow-lg shadow-cyan-900/40">
+                        <i data-lucide="mail" class="w-4 h-4"></i>
+                        <span>Contact Principal Investigators: support@rfwavecode.com</span>
+                    </a>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-gray-900 bg-gray-950 py-4 px-6 text-center text-xs text-gray-600 mono">
+        RadBurn™ Extreme-Environment SiC/GaN Diagnostic Engine // Built under NASA SBIR/STTR Topic T4.03 // Proprietary Inversion Architecture // Inquiries: support@rfwavecode.com
+    </footer>
+
+    <!-- ========================================================================= -->
+    <!-- SCRIPT ENGINE: SIMULATION, CHARTS, HIGH-DPI CANVAS, TAB SWITCHER          -->
+    <!-- ========================================================================= -->
+    <script>
+        // -------------------------------------------------------------
+        // Global State & Simulation Variables
+        // -------------------------------------------------------------
+        const simState = {
+            letFlux: 42.8,              // MeV-cm2/mg
+            vdsNominal: 1200,           // Volts
+            vdsActual: 1200,            // Dynamic regulated Volts
+            tempK: 40,                  // Kelvin (Lunar night default)
+            freqKhz: 150,               // Switching kHz
+            autonomousMitigation: true,
+            
+            // Physical micro-state
+            accumulatedQ: 1.85,         // pC (Trapped displacement charge)
+            cgdVal: 18.2,               // pF (Gate-drain capacitance)
+            gateLeakage: 0.12,          // nA
+            oxideEfield: 3.82,          // MV/cm
+            plasmaDensity: 1.2e18,      // cm^-3
+            oxideHealthPct: 98.4,       // %
+            
+            // Strike transient animation state
+            strikeActive: false,
+            strikeProgress: 0,
+            strikeX: 0.48,              // normalized canvas width position
+            particles: [],
+            
+            // Precursor & Alarm State
+            hazardDetected: false,
+            alertDismissed: false,
+            
+            // Dynamic Phase-Space Trail
+            trajectoryHistory: []
+        };
+
+        // Tab mapping strictly adhering to Zero-Tolerance Rules
+        const tabMapping = {
+            'sim': { viewId: 'viewSim', btnId: 'tabBtnSim' },
+            'physics': { viewId: 'viewPhysics', btnId: 'tabBtnPhysics' },
+            'proposal': { viewId: 'viewProposal', btnId: 'tabBtnProposal' },
+            'arr': { viewId: 'viewARR', btnId: 'tabBtnARR' }
+        };
+
+        let phaseChart = null;
+        let leakageChart = null;
+        let voltageChart = null;
+        let simInterval = null;
+        let tickCounter = 0;
+
+        // -------------------------------------------------------------
+        // Tab Switching Logic
+        // -------------------------------------------------------------
+        function switchTab(selectedKey) {
+            Object.keys(tabMapping).forEach(key => {
+                const item = tabMapping[key];
+                const viewEl = document.getElementById(item.viewId);
+                const btnEl = document.getElementById(item.btnId);
+
+                if (key === selectedKey) {
+                    viewEl.classList.remove('hidden');
+                    btnEl.classList.remove('text-gray-400');
+                    btnEl.classList.add('text-white', 'bg-cyan-600');
+                } else {
+                    viewEl.classList.add('hidden');
+                    btnEl.classList.remove('text-white', 'bg-cyan-600');
+                    btnEl.classList.add('text-gray-400');
+                }
+            });
+
+            // Re-render MathJax equations seamlessly when tabs become visible
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise().catch(err => console.debug('MathJax error:', err));
+            }
+
+            // High-DPI canvas resize when returning to simulation view
+            if (selectedKey === 'sim') {
+                setTimeout(() => {
+                    resizeCanvas();
+                    if (phaseChart) phaseChart.resize();
+                    if (leakageChart) leakageChart.resize();
+                    if (voltageChart) voltageChart.resize();
+                }, 50);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // User Controls & Input Callbacks
+        // -------------------------------------------------------------
+        function updateSimulationParams() {
+            simState.letFlux = parseFloat(document.getElementById('sliderLET').value);
+            simState.vdsNominal = parseFloat(document.getElementById('sliderVds').value);
+            simState.tempK = parseFloat(document.getElementById('sliderTemp').value);
+            simState.freqKhz = parseFloat(document.getElementById('sliderFreq').value);
+            simState.autonomousMitigation = document.getElementById('toggleAutonomousMitigation').checked;
+
+            document.getElementById('valLET').innerText = simState.letFlux.toFixed(1);
+            document.getElementById('valVdsSet').innerText = simState.vdsNominal + ' V';
+            document.getElementById('valTemp').innerText = simState.tempK + ' K';
+            document.getElementById('valFreq').innerText = simState.freqKhz + ' kHz';
+            
+            document.getElementById('navLET').innerText = simState.letFlux.toFixed(1) + ' MeV-cm²/mg';
+        }
+
+        function triggerIonStrike() {
+            simState.strikeActive = true;
+            simState.strikeProgress = 0;
+            simState.strikeX = 0.42 + Math.random() * 0.16; // near gate neck region
+
+            // Sudden surge in trapped charge proportional to LET
+            const deltaQ = (simState.letFlux / 40) * (3.8 + Math.random() * 2.2);
+            simState.accumulatedQ += deltaQ;
+
+            // Generate strike visual plasma particles
+            const count = 45;
+            for (let i = 0; i < count; i++) {
+                simState.particles.push({
+                    x: simState.strikeX + (Math.random() - 0.5) * 0.04,
+                    y: 0.15 + Math.random() * 0.7,
+                    vx: (Math.random() - 0.5) * 0.006,
+                    vy: (Math.random() - 0.2) * 0.012,
+                    life: 1.0,
+                    size: Math.random() * 2.5 + 1.2,
+                    color: Math.random() > 0.4 ? '#38bdf8' : '#f43f5e'
+                });
+            }
+        }
+
+        function resetDeviceState() {
+            simState.accumulatedQ = 1.85;
+            simState.vdsActual = simState.vdsNominal;
+            simState.hazardDetected = false;
+            simState.alertDismissed = false;
+            simState.particles = [];
+            simState.trajectoryHistory = [];
+            dismissAlert();
+            updateTelemetryDisplay();
+        }
+
+        function dismissAlert() {
+            simState.alertDismissed = true;
+            document.getElementById('alertBanner').classList.add('hidden');
+        }
+
+        // -------------------------------------------------------------
+        // Canvas Microscopic SiC MOSFET Animation (High-DPI Aware)
+        // -------------------------------------------------------------
+        const canvas = document.getElementById('mosfetCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width || 600;
+            const h = rect.height || 320;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            ctx.resetTransform ? ctx.resetTransform() : ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(dpr, dpr);
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (phaseChart) phaseChart.resize();
+            if (leakageChart) leakageChart.resize();
+            if (voltageChart) voltageChart.resize();
+        });
+
+        function drawMosfetLattice() {
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Layer Geometry Definitions
+            const gateY = h * 0.18;
+            const oxideH = h * 0.08;
+            const epiY = gateY + oxideH;
+            const epiH = h * 0.52;
+            const subY = epiY + epiH;
+            const subH = h - subY;
+
+            // 1. Substrate (n+ 4H-SiC)
+            const subGrad = ctx.createLinearGradient(0, subY, 0, h);
+            subGrad.addColorStop(0, '#0f172a');
+            subGrad.addColorStop(1, '#020617');
+            ctx.fillStyle = subGrad;
+            ctx.fillRect(0, subY, w, subH);
+
+            // 2. Drift Epitaxial Layer (n- 4H-SiC)
+            const epiGrad = ctx.createLinearGradient(0, epiY, 0, subY);
+            epiGrad.addColorStop(0, '#082f49');
+            epiGrad.addColorStop(1, '#0c1a2e');
+            ctx.fillStyle = epiGrad;
+            ctx.fillRect(0, epiY, w, epiH);
+
+            // 3. Gate Oxide Dielectric Layer (SiO2)
+            const oxGrad = ctx.createLinearGradient(0, gateY, 0, epiY);
+            if (simState.hazardDetected) {
+                oxGrad.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
+                oxGrad.addColorStop(0.5, 'rgba(244, 63, 94, 0.7)');
+                oxGrad.addColorStop(1, 'rgba(239, 68, 68, 0.4)');
+            } else {
+                oxGrad.addColorStop(0, 'rgba(6, 182, 212, 0.3)');
+                oxGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.5)');
+                oxGrad.addColorStop(1, 'rgba(6, 182, 212, 0.3)');
+            }
+            ctx.fillStyle = oxGrad;
+            ctx.fillRect(0, gateY, w, oxideH);
+
+            // 4. Polysilicon Gate Electrode (Center Block)
+            const polyW = w * 0.36;
+            const polyX = (w - polyW) / 2;
+            const polyH = gateY;
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(polyX, 0, polyW, polyH);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(polyX, 0, polyW, polyH);
+
+            // 5. Source Wells (p-body and n+ source on left & right)
+            const wellW = w * 0.22;
+            // Left P-Well
+            ctx.fillStyle = '#311042';
+            ctx.fillRect(0, epiY, wellW, h * 0.22);
+            ctx.fillStyle = '#065f46'; // N+ source
+            ctx.fillRect(0, epiY, wellW * 0.5, h * 0.08);
+
+            // Right P-Well
+            ctx.fillStyle = '#311042';
+            ctx.fillRect(w - wellW, epiY, wellW, h * 0.22);
+            ctx.fillStyle = '#065f46'; // N+ source
+            ctx.fillRect(w - wellW * 0.5, epiY, wellW * 0.5, h * 0.08);
+
+            // Labels on Canvas Layers
+            ctx.font = '10px JetBrains Mono';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('POLYSILICON GATE [V_g = 0V OFF]', polyX + 10, polyH * 0.65);
+            ctx.fillText('GATE DIELECTRIC (SiO2 - 45nm)', polyX + 12, gateY + oxideH * 0.65);
+            ctx.fillText('n- 4H-SiC EPITAXIAL DRIFT REGION (30 µm)', 20, epiY + epiH * 0.5);
+            ctx.fillText('DRAIN SUBSTRATE (n+ 4H-SiC)', 20, subY + subH * 0.6);
+
+            // Electric Field Lines (Vertical lines with glow)
+            const numLines = 14;
+            const fieldAlpha = Math.min(1.0, 0.15 + (simState.vdsActual / 1700) * 0.65);
+            ctx.strokeStyle = simState.hazardDetected ? `rgba(244, 63, 94, ${fieldAlpha})` : `rgba(56, 189, 248, ${fieldAlpha})`;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 6]);
+            for (let i = 1; i < numLines; i++) {
+                const lx = (w / numLines) * i;
+                ctx.beginPath();
+                ctx.moveTo(lx, epiY);
+                ctx.lineTo(lx, subY);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Draw Heavy-Ion Strike Track if Active
+            if (simState.strikeActive) {
+                const sx = simState.strikeX * w;
+                
+                // Relativistic Ion Track Beam
+                ctx.save();
+                const beamGrad = ctx.createLinearGradient(sx, 0, sx, h);
+                beamGrad.addColorStop(0, 'rgba(251, 191, 36, 0.95)');
+                beamGrad.addColorStop(0.3, 'rgba(244, 63, 94, 0.85)');
+                beamGrad.addColorStop(1, 'rgba(168, 85, 247, 0.4)');
+                ctx.strokeStyle = beamGrad;
+                ctx.lineWidth = 4.5;
+                ctx.shadowColor = '#f43f5e';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.moveTo(sx, 0);
+                ctx.lineTo(sx, h);
+                ctx.stroke();
+                ctx.restore();
+
+                // Trapped Charge Cluster at Oxide Interface
+                const spotR = 12 + Math.min(18, simState.accumulatedQ * 1.8);
+                const spotGrad = ctx.createRadialGradient(sx, epiY, 2, sx, epiY, spotR);
+                spotGrad.addColorStop(0, '#f43f5e');
+                spotGrad.addColorStop(0.6, 'rgba(239, 68, 68, 0.5)');
+                spotGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = spotGrad;
+                ctx.beginPath();
+                ctx.arc(sx, epiY, spotR, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Progress decaying
+                simState.strikeProgress += 0.05;
+                if (simState.strikeProgress > 1.0) {
+                    simState.strikeActive = false;
+                }
+            }
+
+            // Draw Dynamic Electron-Hole Plasma Particles
+            for (let i = simState.particles.length - 1; i >= 0; i--) {
+                const p = simState.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.025;
+
+                if (p.life <= 0) {
+                    simState.particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x * w, p.y * h, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Mathematical Model & Telemetry Engine
+        // -------------------------------------------------------------
+        function stepPhysics() {
+            tickCounter++;
+
+            // Natural slow recombination / charge dissipation if not continuously struck
+            if (simState.accumulatedQ > 1.85) {
+                // Slower dissipation at cryogenic temperatures: tau ~ 1 / T
+                const dissipationRate = 0.012 * (simState.tempK / 300);
+                simState.accumulatedQ -= dissipationRate;
+            }
+
+            // Non-linear Gate-to-Drain Capacitance C_gd Model (pF)
+            // Under nominal conditions C_gd drops with sqrt(Vds). With trapped Q, dielectric thinning shifts C_gd upwards.
+            const nominalCgd = 28 / Math.sqrt(1 + simState.vdsActual / 85);
+            const anomalousShift = Math.pow(Math.max(0, simState.accumulatedQ - 3.0), 1.65) * 1.85;
+            simState.cgdVal = nominalCgd + anomalousShift;
+
+            // Electric Field Across 45nm Oxide (MV/cm)
+            // Base bias field + localized dipole trapped charge field
+            const baseE = (simState.vdsActual / 1200) * 3.2;
+            const trapE = (simState.accumulatedQ / 12) * 6.5;
+            simState.oxideEfield = baseE + trapE;
+
+            // Gate Leakage Ig (nA) - Fowler-Nordheim Tunneling exponential
+            const fnExponent = Math.max(0, (simState.oxideEfield - 4.0) * 1.8);
+            simState.gateLeakage = 0.08 + Math.exp(fnExponent) * 0.04;
+
+            // Dielectric Health Percentage (%)
+            const healthDegradation = (simState.accumulatedQ / 14) * 85 + (simState.oxideEfield > 8.0 ? 30 : 0);
+            simState.oxideHealthPct = Math.max(1.0, Math.min(99.9, 100 - healthDegradation));
+
+            // Autonomous State Observer & Closed-Loop Controller
+            const isHazard = (simState.accumulatedQ > 6.8 || simState.oxideEfield > 8.5 || simState.cgdVal > 22.0);
+            simState.hazardDetected = isHazard;
+
+            if (isHazard && simState.autonomousMitigation) {
+                // Rapidly throttle V_ds to safe quench limit (440 V)
+                if (simState.vdsActual > 460) {
+                    simState.vdsActual -= 55; // Fast slope down
+                }
+                if (!simState.alertDismissed) {
+                    document.getElementById('alertBanner').classList.remove('hidden');
+                }
+            } else if (!isHazard) {
+                // Restore nominal V_ds gradually
+                if (simState.vdsActual < simState.vdsNominal) {
+                    simState.vdsActual += 20;
+                }
+            }
+
+            // Update Phase-Space Trajectory History (Rolling buffer of 18 points)
+            simState.trajectoryHistory.push({
+                x: parseFloat(simState.accumulatedQ.toFixed(2)),
+                y: parseFloat(simState.cgdVal.toFixed(2))
+            });
+            if (simState.trajectoryHistory.length > 20) {
+                simState.trajectoryHistory.shift();
+            }
+
+            // Update UI & Canvas
+            drawMosfetLattice();
+            updateTelemetryDisplay();
+
+            // Throttled Chart Updates (Every 3rd tick for smooth 60fps canvas)
+            if (tickCounter % 3 === 0) {
+                updateCharts();
+            }
+        }
+
+        function updateTelemetryDisplay() {
+            document.getElementById('navVds').innerText = Math.round(simState.vdsActual) + ' V';
+            document.getElementById('navOxideHealth').innerText = simState.oxideHealthPct.toFixed(1) + '%';
+            
+            // Health pill
+            const statusPill = document.getElementById('navStatusPill');
+            const statusText = document.getElementById('navStatusText');
+            if (simState.hazardDetected) {
+                statusPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full bg-rose-950/90 text-rose-300 border border-rose-700/80 font-semibold tracking-wide glow-red";
+                statusText.innerText = "CRITICAL PRECURSOR";
+            } else {
+                statusPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-700/60 font-semibold tracking-wide";
+                statusText.innerText = "HEALTHY";
+            }
+
+            // Overlay Badges on Canvas
+            document.getElementById('overlayEfield').innerText = simState.oxideEfield.toFixed(2) + ' MV/cm';
+            document.getElementById('overlayQdisp').innerText = simState.accumulatedQ.toFixed(2) + ' pC';
+            document.getElementById('overlayPlasmaDens').innerText = (1.2 * (simState.letFlux / 40)).toFixed(1) + 'e18 cm⁻³';
+
+            // Secondary Metrics
+            document.getElementById('txtIg').innerText = simState.gateLeakage > 1000 ? (simState.gateLeakage / 1000).toFixed(2) + ' µA' : simState.gateLeakage.toFixed(2) + ' nA';
+            const throttlePct = Math.round((simState.vdsActual / simState.vdsNominal) * 100);
+            const throttleTxt = document.getElementById('txtThrottleState');
+            throttleTxt.innerText = `${Math.round(simState.vdsActual)} V (${throttlePct}% ${throttlePct < 100 ? 'THROTTLED' : 'NOMINAL'})`;
+            throttleTxt.className = throttlePct < 100 ? "text-xs mono text-amber-400 font-bold" : "text-xs mono text-emerald-400 font-bold";
+        }
+
+        // -------------------------------------------------------------
+        // Chart.js Diagnostic Plots Initialization
+        // -------------------------------------------------------------
+        function initCharts() {
+            // 1. Primary Phase-Space Scatter Chart: Q vs C_gd
+            const ctxPhase = document.getElementById('phaseSpaceChart').getContext('2d');
+            
+            // Reference Nominal Corridor Data (Q = 0 to 14 pC)
+            const nominalBaseline = [];
+            const hazardThreshold = [];
+            for (let q = 0; q <= 14; q += 0.5) {
+                // Nominal corridor stays low and flat as Vds holds
+                const baseC = 16.5 + 0.35 * q;
+                nominalBaseline.push({ x: q, y: baseC });
+                // Critical SEGR Hazard boundary curve
+                const critC = 20.0 + 0.15 * q + (q > 7 ? (q - 7) * 1.8 : 0);
+                hazardThreshold.push({ x: q, y: Math.min(38, critC) });
+            }
+
+            phaseChart = new Chart(ctxPhase, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Critical Rupture Boundary',
+                            data: hazardThreshold,
+                            showLine: true,
+                            borderColor: 'rgba(239, 68, 68, 0.85)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                            fill: 'start',
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Nominal corridor',
+                            data: nominalBaseline,
+                            showLine: true,
+                            borderColor: 'rgba(16, 185, 129, 0.75)',
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Dynamic Trajectory (Q, Cgd)',
+                            data: [],
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.8)',
+                            pointBackgroundColor: '#ffffff',
+                            pointBorderColor: '#38bdf8',
+                            pointRadius: (ctx) => {
+                                const index = ctx.dataIndex;
+                                const count = ctx.dataset.data.length;
+                                return index === count - 1 ? 6 : 3;
+                            },
+                            showLine: true,
+                            borderWidth: 2,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: 0,
+                            max: 14,
+                            title: {
+                                display: true,
+                                text: 'Electric Charge Q (pC)',
+                                color: '#94a3b8',
+                                font: { family: 'JetBrains Mono', size: 10 }
+                            },
+                            grid: { color: 'rgba(30, 41, 59, 0.6)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+                        },
+                        y: {
+                            min: 10,
+                            max: 38,
+                            title: {
+                                display: true,
+                                text: 'Capacitance C_gd (pF)',
+                                color: '#94a3b8',
+                                font: { family: 'JetBrains Mono', size: 10 }
+                            },
+                            grid: { color: 'rgba(30, 41, 59, 0.6)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // 2. Secondary Time-Series: Gate Leakage & E_ox
+            const ctxLeak = document.getElementById('timeSeriesLeakage').getContext('2d');
+            const zeroLabels = Array(25).fill('');
+            leakageChart = new Chart(ctxLeak, {
+                type: 'line',
+                data: {
+                    labels: zeroLabels,
+                    datasets: [
+                        {
+                            label: 'Oxide E-Field (MV/cm)',
+                            data: Array(25).fill(3.8),
+                            borderColor: '#38bdf8',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            yAxisID: 'yE'
+                        },
+                        {
+                            label: 'Leakage Ig (nA)',
+                            data: Array(25).fill(0.12),
+                            borderColor: '#ec4899',
+                            borderWidth: 1.8,
+                            pointRadius: 0,
+                            yAxisID: 'yI'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        yE: {
+                            position: 'left',
+                            min: 0,
+                            max: 12,
+                            ticks: { color: '#38bdf8', font: { family: 'JetBrains Mono', size: 9 } },
+                            grid: { color: 'rgba(30, 41, 59, 0.5)' }
+                        },
+                        yI: {
+                            position: 'right',
+                            min: 0,
+                            max: 5,
+                            ticks: { color: '#ec4899', font: { family: 'JetBrains Mono', size: 9 } },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 3. Secondary Time-Series: Drain Bus Voltage
+            const ctxVolt = document.getElementById('timeSeriesVoltage').getContext('2d');
+            voltageChart = new Chart(ctxVolt, {
+                type: 'line',
+                data: {
+                    labels: zeroLabels,
+                    datasets: [
+                        {
+                            label: 'Bus V_ds (V)',
+                            data: Array(25).fill(1200),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            min: 300,
+                            max: 1700,
+                            ticks: { color: '#10b981', font: { family: 'JetBrains Mono', size: 9 } },
+                            grid: { color: 'rgba(30, 41, 59, 0.5)' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateCharts() {
+            // Update Phase Space Trajectory Points
+            if (phaseChart) {
+                phaseChart.data.datasets[2].data = simState.trajectoryHistory;
+                phaseChart.update('none');
+            }
+
+            // Update Time-Series Leakage & Field
+            if (leakageChart) {
+                const dataE = leakageChart.data.datasets[0].data;
+                const dataI = leakageChart.data.datasets[1].data;
+                dataE.shift();
+                dataI.shift();
+                dataE.push(simState.oxideEfield);
+                dataI.push(Math.min(5, simState.gateLeakage));
+                leakageChart.update('none');
+            }
+
+            // Update Time-Series Voltage
+            if (voltageChart) {
+                const dataV = voltageChart.data.datasets[0].data;
+                dataV.shift();
+                dataV.push(simState.vdsActual);
+                voltageChart.data.datasets[0].borderColor = simState.vdsActual < 800 ? '#f59e0b' : '#10b981';
+                voltageChart.update('none');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // App Bootstrap on Window Load
+        // -------------------------------------------------------------
+        window.onload = function () {
+            // Initialize Lucide icons
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+
+            // Setup High-DPI Canvas
+            resizeCanvas();
+
+            // Initialize Chart.js
+            initCharts();
+
+            // Start High-Performance Simulation Loop (~30 fps update)
+            simInterval = setInterval(stepPhysics, 35);
+        };
+    </script>
+</body>
+</html>
